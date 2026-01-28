@@ -62,6 +62,7 @@ const ForecastScreen: React.FC<ForecastScreenProps> = ({ navigation }) => {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.white} />
           <Text style={styles.loadingText}>Loading forecast...</Text>
+          <Text style={styles.loadingSubText}>Getting 5-day weather data</Text>
         </View>
       </LinearGradient>
     );
@@ -80,11 +81,12 @@ const ForecastScreen: React.FC<ForecastScreenProps> = ({ navigation }) => {
           <View style={styles.headerRight} />
         </View>
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={64} color={colors.white} />
+          <Ionicons name="cloud-offline" size={64} color={colors.white} />
+          <Text style={styles.errorTitle}>Forecast Unavailable</Text>
           <Text style={styles.errorText}>{error}</Text>
           <View style={styles.retryButton}>
             <Pressable onPress={handleRefresh} style={styles.retryButtonInner}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>Try Again</Text>
             </Pressable>
           </View>
         </View>
@@ -104,7 +106,11 @@ const ForecastScreen: React.FC<ForecastScreenProps> = ({ navigation }) => {
           </Pressable>
         </View>
         <Text style={styles.headerTitle}>5-Day Forecast</Text>
-        <View style={styles.headerRight} />
+        <View style={styles.headerRight}>
+          {isLoading && (
+            <ActivityIndicator size="small" color={colors.white} />
+          )}
+        </View>
       </View>
 
       <ScrollView
@@ -124,26 +130,54 @@ const ForecastScreen: React.FC<ForecastScreenProps> = ({ navigation }) => {
         </View>
 
         {/* Forecast Cards */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.forecastContainer}
-        >
-          {forecast.map((day, index) => (
-            <ForecastCard key={index} forecast={day} />
-          ))}
-        </ScrollView>
+        {forecast.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.forecastContainer}
+          >
+            {forecast.map((day, index) => (
+              <ForecastCard key={`${day.date}-${index}`} forecast={day} />
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={styles.noDataContainer}>
+            <Ionicons name="calendar-outline" size={48} color={colors.white} />
+            <Text style={styles.noDataText}>No forecast data available</Text>
+          </View>
+        )}
 
-        {/* Additional Info */}
-        <View style={styles.infoSection}>
-          <Text style={styles.infoTitle}>Weather Summary</Text>
-          <Text style={styles.infoText}>
-            The next few days will see varying conditions with temperatures ranging from 
-            {Math.min(...forecast.map(f => f.low))}° to {Math.max(...forecast.map(f => f.high))}°. 
-            {forecast.some(f => f.precipitation > 50) 
-              ? ' Expect some rainy periods.' 
-              : ' Mostly dry conditions expected.'
-            }
+        {/* Weather Summary */}
+        {forecast.length > 0 && (
+          <View style={styles.infoSection}>
+            <Text style={styles.infoTitle}>5-Day Summary</Text>
+            <Text style={styles.infoText}>
+              Temperature range: {Math.min(...forecast.map(f => f.low))}° to {Math.max(...forecast.map(f => f.high))}°
+            </Text>
+            <Text style={styles.infoText}>
+              {forecast.some(f => f.precipitation > 50) 
+                ? 'Rain expected in the coming days.' 
+                : forecast.some(f => f.precipitation > 20)
+                ? 'Some chance of rain this week.'
+                : 'Mostly dry conditions expected.'
+              }
+            </Text>
+            <Text style={styles.infoText}>
+              Best day: {forecast.reduce((best, day) => 
+                day.high > best.high && day.precipitation < best.precipitation ? day : best
+              ).dayName} ({forecast.reduce((best, day) => 
+                day.high > best.high && day.precipitation < best.precipitation ? day : best
+              ).high}°, {forecast.reduce((best, day) => 
+                day.high > best.high && day.precipitation < best.precipitation ? day : best
+              ).precipitation}% rain)
+            </Text>
+          </View>
+        )}
+
+        {/* Data Attribution */}
+        <View style={styles.attribution}>
+          <Text style={styles.attributionText}>
+            Forecast data provided by OpenWeatherMap
           </Text>
         </View>
       </ScrollView>
@@ -167,6 +201,7 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 40,
+    alignItems: 'flex-end',
   },
   backButton: {
     padding: 8,
@@ -186,11 +221,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 32,
   },
   loadingText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '500',
     marginTop: 16,
+  },
+  loadingSubText: {
+    color: colors.white,
+    fontSize: 14,
+    opacity: 0.7,
+    marginTop: 4,
   },
   errorContainer: {
     flex: 1,
@@ -198,11 +241,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
   },
+  errorTitle: {
+    color: colors.white,
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
   errorText: {
     color: colors.white,
     fontSize: 16,
     textAlign: 'center',
-    marginVertical: 24,
+    marginBottom: 24,
+    lineHeight: 22,
   },
   retryButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -234,6 +285,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
+  noDataContainer: {
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  noDataText: {
+    color: colors.white,
+    fontSize: 16,
+    marginTop: 16,
+    opacity: 0.7,
+  },
   infoSection: {
     paddingHorizontal: 24,
     marginTop: 16,
@@ -249,6 +310,18 @@ const styles = StyleSheet.create({
     color: colors.white,
     opacity: 0.8,
     lineHeight: 20,
+    marginBottom: 6,
+  },
+  attribution: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    alignItems: 'center',
+  },
+  attributionText: {
+    color: colors.white,
+    fontSize: 10,
+    opacity: 0.6,
+    textAlign: 'center',
   },
 });
 

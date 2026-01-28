@@ -55,7 +55,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       <LinearGradient colors={gradientColors} style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.white} />
-          <Text style={styles.loadingText}>Loading weather data...</Text>
+          <Text style={styles.loadingText}>Getting weather data...</Text>
+          <Text style={styles.loadingSubText}>Connecting to weather service</Text>
         </View>
       </LinearGradient>
     );
@@ -65,9 +66,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     return (
       <LinearGradient colors={gradientColors} style={styles.container}>
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={64} color={colors.white} />
+          <Ionicons name="cloud-offline" size={64} color={colors.white} />
+          <Text style={styles.errorTitle}>Weather Unavailable</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <CustomButton title="Retry" onPress={handleRefresh} />
+          <View style={styles.errorButton}>
+            <CustomButton title="Try Again" onPress={handleRefresh} />
+          </View>
+          <Text style={styles.errorHint}>
+            {error.includes('API key') ? 
+              'Please configure your OpenWeatherMap API key' : 
+              'Check your internet connection and try again'
+            }
+          </Text>
         </View>
       </LinearGradient>
     );
@@ -92,6 +102,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Ionicons name="location" size={16} color={colors.white} />
             <Text style={styles.location}>{currentWeather?.location}</Text>
           </View>
+          {isLoading && (
+            <View style={styles.refreshIndicator}>
+              <ActivityIndicator size="small" color={colors.white} />
+            </View>
+          )}
         </View>
 
         {/* Main Weather Display */}
@@ -127,6 +142,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             unit="km"
             icon={<Ionicons name="eye" size={24} color={colors.white} />}
           />
+          <WeatherCard
+            title="Pressure"
+            value={currentWeather?.pressure || 0}
+            unit="hPa"
+            icon={<Ionicons name="speedometer" size={24} color={colors.white} />}
+          />
         </View>
 
         {/* Forecast Button */}
@@ -136,6 +157,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             onPress={navigateToForecast}
             icon={<Ionicons name="calendar" size={20} color={colors.white} />}
           />
+        </View>
+
+        {/* Data Source Attribution */}
+        <View style={styles.attribution}>
+          <Text style={styles.attributionText}>
+            Weather data provided by OpenWeatherMap
+          </Text>
         </View>
       </ScrollView>
     </LinearGradient>
@@ -154,11 +182,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 32,
   },
   loadingText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '500',
     marginTop: 16,
+  },
+  loadingSubText: {
+    color: colors.white,
+    fontSize: 14,
+    opacity: 0.7,
+    marginTop: 4,
   },
   errorContainer: {
     flex: 1,
@@ -166,19 +202,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
   },
+  errorTitle: {
+    color: colors.white,
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
   errorText: {
     color: colors.white,
     fontSize: 16,
     textAlign: 'center',
-    marginVertical: 24,
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  errorButton: {
+    marginBottom: 16,
+  },
+  errorHint: {
+    color: colors.white,
+    fontSize: 12,
+    opacity: 0.7,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   header: {
     paddingHorizontal: 24,
     paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
     justifyContent: 'center',
   },
   location: {
@@ -186,6 +244,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     marginLeft: 4,
+  },
+  refreshIndicator: {
+    position: 'absolute',
+    right: 24,
   },
   mainWeather: {
     alignItems: 'center',
@@ -217,7 +279,18 @@ const styles = StyleSheet.create({
   },
   forecastButton: {
     paddingHorizontal: 24,
+    paddingBottom: 16,
+  },
+  attribution: {
+    paddingHorizontal: 24,
     paddingBottom: 32,
+    alignItems: 'center',
+  },
+  attributionText: {
+    color: colors.white,
+    fontSize: 10,
+    opacity: 0.6,
+    textAlign: 'center',
   },
 });
 
