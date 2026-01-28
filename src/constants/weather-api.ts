@@ -9,7 +9,7 @@
 
 export const WEATHER_CONFIG = {
   // Replace this with your actual OpenWeatherMap API key
-  API_KEY: 'YOUR_API_KEY_HERE',
+  API_KEY: 'e724c58404f238764e1588e742372c34',
   BASE_URL: 'https://api.openweathermap.org/data/2.5',
   DEFAULT_CITY: 'New York',
   UNITS: 'metric', // metric for Celsius, imperial for Fahrenheit
