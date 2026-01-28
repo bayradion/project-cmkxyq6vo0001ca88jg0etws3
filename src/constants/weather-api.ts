@@ -21,7 +21,7 @@ export const WEATHER_CONFIG = {
   // Request parameters
   DEFAULT_PARAMS: {
     units: 'metric',
-    appid: '', // Will be set dynamically
+    appid: 'e724c58404f238764e1588e742372c34', // Set API key here too
   },
 };
 
@@ -72,7 +72,22 @@ export const API_STATUS = {
 
 // Validation function for API key
 export const validateApiKey = (apiKey: string): boolean => {
-  return apiKey && apiKey !== 'YOUR_API_KEY_HERE' && apiKey !== 'demo_key' && apiKey.length > 0;
+  if (!apiKey || typeof apiKey !== 'string') {
+    return false;
+  }
+  
+  // Check if it's not a placeholder value
+  const invalidKeys = ['YOUR_API_KEY_HERE', 'demo_key', '', 'null', 'undefined'];
+  if (invalidKeys.includes(apiKey)) {
+    return false;
+  }
+  
+  // OpenWeatherMap API keys are typically 32 characters long
+  if (apiKey.length < 10) {
+    return false;
+  }
+  
+  return true;
 };
 
 // Get error message based on status code
@@ -88,5 +103,22 @@ export const getErrorMessage = (statusCode: number): string => {
       return ERROR_MESSAGES.GENERAL_ERROR;
     default:
       return ERROR_MESSAGES.NETWORK_ERROR;
+  }
+};
+
+// Test API key validity by making a simple request
+export const testApiKey = async (apiKey: string): Promise<boolean> => {
+  try {
+    if (!validateApiKey(apiKey)) {
+      return false;
+    }
+    
+    const testUrl = `${WEATHER_CONFIG.BASE_URL}${WEATHER_CONFIG.CURRENT_WEATHER}?q=London&appid=${apiKey}&units=metric`;
+    const response = await fetch(testUrl);
+    
+    return response.ok;
+  } catch (error) {
+    console.warn('API key test failed:', error);
+    return false;
   }
 };

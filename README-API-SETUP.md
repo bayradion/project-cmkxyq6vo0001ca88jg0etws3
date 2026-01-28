@@ -1,69 +1,54 @@
-# Weather App API Setup Guide
+# OpenWeatherMap API Setup Guide
 
-## Getting Your Free OpenWeatherMap API Key
+## Quick Setup
 
-This weather app uses the OpenWeatherMap API to fetch real-time weather data. You'll need to get a free API key to make the app work properly.
+Your API key has been configured: `e724c58404f238764e1588e742372c34`
 
-### Step 1: Sign Up for OpenWeatherMap
+The app should now work properly with weather data from OpenWeatherMap.
 
-1. Go to [https://openweathermap.org/api](https://openweathermap.org/api)
-2. Click on "Subscribe" under "Current Weather Data" (the free tier allows up to 1,000 API calls per day)
-3. Create a new account or sign in if you already have one
-4. Complete the registration process
+## What was fixed:
 
-### Step 2: Get Your API Key
+1. **API Key Configuration**: The API key is now properly set in both `WEATHER_CONFIG.API_KEY` and `WEATHER_CONFIG.DEFAULT_PARAMS.appid`
 
-1. After signing in, go to your account dashboard
-2. Click on the "API Keys" tab
-3. You should see a default API key already generated
-4. Copy this API key (it will look something like: `a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6`)
+2. **Enhanced Validation**: Improved the `validateApiKey()` function to better detect invalid or placeholder keys
 
-### Step 3: Configure the App
+3. **Better Error Handling**: Added more detailed logging to help debug API issues
 
-1. Open the file `src/constants/weather-api.ts`
-2. Find the line that says:
-   ```typescript
-   API_KEY: 'YOUR_API_KEY_HERE',
-   ```
-3. Replace `'YOUR_API_KEY_HERE'` with your actual API key:
-   ```typescript
-   API_KEY: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6',
-   ```
-4. Save the file
+4. **URL Building**: Fixed the URL construction to properly include the API key in requests
 
-### Step 4: Test the App
+## Testing the API
 
-1. Restart your development server if it's running
-2. The app should now be able to fetch real weather data
-3. If you see an error, double-check that you've copied the API key correctly
+The app will automatically test your API key when you:
+- Launch the app (fetches weather for New York by default)
+- Search for a new city
+- Pull to refresh the weather data
 
-## Important Notes
+## API Usage Limits
 
-- **Free Tier Limits**: The free OpenWeatherMap plan allows up to 1,000 API calls per day and 60 calls per minute
-- **API Key Activation**: New API keys can take up to 10 minutes to become active
-- **Keep Your Key Secure**: Don't share your API key publicly or commit it to version control in production apps
+With the free OpenWeatherMap plan, you get:
+- 1,000 API calls per day
+- 60 calls per minute
+- Access to current weather and 5-day forecast
 
 ## Troubleshooting
 
-### "Invalid API Key" Error
-- Make sure you've replaced `'YOUR_API_KEY_HERE'` with your actual key
-- Check that you've copied the key correctly (no extra spaces)
-- Wait 10 minutes after creating the key - it needs time to activate
+If you still see "Weather service unavailable":
 
-### "Rate Limit Exceeded" Error
-- You've made too many requests. Wait a minute and try again
-- Consider implementing request caching if you're hitting limits frequently
+1. **Check API Key Status**: Make sure your API key is active in your OpenWeatherMap account
+2. **Wait for Activation**: New API keys can take up to 2 hours to become active
+3. **Check Network**: Ensure you have an internet connection
+4. **Check Console**: Look for detailed error messages in the developer console
 
-### "City Not Found" Error
-- Try different city names or use more specific locations
-- Example: "New York, NY, US" instead of just "New York"
+## API Endpoints Used
 
-## Alternative Weather APIs
+- Current Weather: `https://api.openweathermap.org/data/2.5/weather`
+- 5-Day Forecast: `https://api.openweathermap.org/data/2.5/forecast`
 
-If you prefer to use a different weather service, here are some alternatives:
+Both endpoints use metric units (Celsius) by default.
 
-- **WeatherAPI.com**: Free tier with 1 million calls/month
-- **AccuWeather**: Free tier with 50 calls/day
-- **OpenWeatherMap One Call API**: More detailed data but requires paid subscription
+## Support
 
-To switch APIs, you'll need to modify the API endpoints and data parsing in `src/store/weatherStore.ts`.
+If you continue to experience issues:
+1. Verify your API key is active at https://openweathermap.org/api
+2. Check the OpenWeatherMap API documentation
+3. Ensure you're not exceeding the rate limits

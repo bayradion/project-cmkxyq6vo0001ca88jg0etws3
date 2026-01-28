@@ -69,26 +69,33 @@ const getMockUVIndex = (): number => {
 
 // Build API URL with proper error checking
 const buildApiUrl = (endpoint: string, params: Record<string, string>): string => {
-  if (!validateApiKey(WEATHER_CONFIG.API_KEY)) {
-    throw new Error(ERROR_MESSAGES.API_KEY_NOT_SET);
+  const apiKey = WEATHER_CONFIG.API_KEY;
+  
+  if (!validateApiKey(apiKey)) {
+    console.error('Invalid API key:', apiKey);
+    throw new Error(ERROR_MESSAGES.INVALID_API_KEY);
   }
   
   const url = new URL(`${WEATHER_CONFIG.BASE_URL}${endpoint}`);
   
-  // Add API key
-  url.searchParams.append('appid', WEATHER_CONFIG.API_KEY);
+  // Add API key first
+  url.searchParams.append('appid', apiKey);
   
   // Add other parameters
   Object.entries(params).forEach(([key, value]) => {
-    url.searchParams.append(key, value);
+    if (key !== 'appid') { // Don't duplicate API key
+      url.searchParams.append(key, value);
+    }
   });
   
+  console.log('Built API URL:', url.toString().replace(apiKey, 'API_KEY_HIDDEN'));
   return url.toString();
 };
 
 // Enhanced fetch with better error handling
 const fetchWithErrorHandling = async (url: string): Promise<Response> => {
   try {
+    console.log('Making API request...');
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -97,13 +104,19 @@ const fetchWithErrorHandling = async (url: string): Promise<Response> => {
       },
     });
     
+    console.log('API response status:', response.status);
+    
     if (!response.ok) {
+      const errorData = await response.text();
+      console.error('API error response:', errorData);
+      
       const errorMessage = getErrorMessage(response.status);
       throw new Error(errorMessage);
     }
     
     return response;
   } catch (error) {
+    console.error('Fetch error:', error);
     if (error instanceof TypeError) {
       throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
     }
@@ -118,12 +131,15 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   error: null,
 
   fetchWeather: async (city = WEATHER_CONFIG.DEFAULT_CITY) => {
+    console.log('Fetching weather for city:', city);
     set({ isLoading: true, error: null });
     
     try {
       // Validate API key first
-      if (!validateApiKey(WEATHER_CONFIG.API_KEY)) {
-        throw new Error(ERROR_MESSAGES.API_KEY_NOT_SET);
+      const apiKey = WEATHER_CONFIG.API_KEY;
+      if (!validateApiKey(apiKey)) {
+        console.error('API key validation failed');
+        throw new Error(ERROR_MESSAGES.INVALID_API_KEY);
       }
 
       const url = buildApiUrl(WEATHER_CONFIG.CURRENT_WEATHER, {
@@ -133,6 +149,8 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       
       const response = await fetchWithErrorHandling(url);
       const data: OpenWeatherCurrentResponse = await response.json();
+      
+      console.log('Weather data received:', data.name);
       
       const weatherData: WeatherData = {
         location: `${data.name}, ${data.sys.country}`,
@@ -158,8 +176,9 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       });
     } catch (error) {
       console.error('Weather fetch error:', error);
+      const errorMessage = error instanceof Error ? error.message : ERROR_MESSAGES.GENERAL_ERROR;
       set({ 
-        error: error instanceof Error ? error.message : ERROR_MESSAGES.GENERAL_ERROR,
+        error: errorMessage,
         isLoading: false,
         currentWeather: null,
       });
@@ -167,12 +186,15 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   },
 
   fetchForecast: async (city = WEATHER_CONFIG.DEFAULT_CITY) => {
+    console.log('Fetching forecast for city:', city);
     set({ isLoading: true, error: null });
     
     try {
       // Validate API key first
-      if (!validateApiKey(WEATHER_CONFIG.API_KEY)) {
-        throw new Error(ERROR_MESSAGES.API_KEY_NOT_SET);
+      const apiKey = WEATHER_CONFIG.API_KEY;
+      if (!validateApiKey(apiKey)) {
+        console.error('API key validation failed for forecast');
+        throw new Error(ERROR_MESSAGES.INVALID_API_KEY);
       }
 
       const url = buildApiUrl(WEATHER_CONFIG.FORECAST, {
@@ -182,6 +204,8 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       
       const response = await fetchWithErrorHandling(url);
       const data: OpenWeatherForecastResponse = await response.json();
+      
+      console.log('Forecast data received, items:', data.list.length);
       
       // Group forecast data by day (API returns 3-hour intervals)
       const dailyForecasts: { [key: string]: any } = {};
@@ -237,8 +261,9 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       });
     } catch (error) {
       console.error('Forecast fetch error:', error);
+      const errorMessage = error instanceof Error ? error.message : ERROR_MESSAGES.GENERAL_ERROR;
       set({ 
-        error: error instanceof Error ? error.message : ERROR_MESSAGES.GENERAL_ERROR,
+        error: errorMessage,
         isLoading: false,
         forecast: [],
       });
