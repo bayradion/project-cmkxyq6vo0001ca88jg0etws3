@@ -11,7 +11,11 @@ import {
   CONDITION_MAPPING, 
   ERROR_MESSAGES,
   validateApiKey,
-  getErrorMessage 
+  getErrorMessage,
+  testApiKey,
+  checkNetworkConnectivity,
+  getFallbackWeatherData,
+  getFallbackForecast
 } from '../constants/weather-api';
 
 // Helper function to map OpenWeatherMap weather conditions to our app icons
@@ -72,7 +76,7 @@ const buildApiUrl = (endpoint: string, params: Record<string, string>): string =
   const apiKey = WEATHER_CONFIG.API_KEY;
   
   if (!validateApiKey(apiKey)) {
-    console.error('Invalid API key:', apiKey);
+    console.error('Invalid API key detected during URL building');
     throw new Error(ERROR_MESSAGES.INVALID_API_KEY);
   }
   
@@ -83,7 +87,7 @@ const buildApiUrl = (endpoint: string, params: Record<string, string>): string =
   
   // Add other parameters
   Object.entries(params).forEach(([key, value]) => {
-    if (key !== 'appid') { // Don't duplicate API key
+    if (key !== 'appid' && value) { // Don't duplicate API key and skip empty values
       url.searchParams.append(key, value);
     }
   });
@@ -92,36 +96,98 @@ const buildApiUrl = (endpoint: string, params: Record<string, string>): string =
   return url.toString();
 };
 
-// Enhanced fetch with better error handling
-const fetchWithErrorHandling = async (url: string): Promise<Response> => {
+// Enhanced fetch with comprehensive error handling and retry mechanism
+const fetchWithErrorHandling = async (url: string, retries = WEATHER_CONFIG.RETRY_ATTEMPTS): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), WEATHER_CONFIG.TIMEOUT);
+  
   try {
-    console.log('Making API request...');
+    console.log(`Making API request (${WEATHER_CONFIG.RETRY_ATTEMPTS - retries + 1}/${WEATHER_CONFIG.RETRY_ATTEMPTS})...`);
+    
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        'User-Agent': 'WeatherApp/1.0',
       },
+      signal: controller.signal,
     });
     
-    console.log('API response status:', response.status);
+    clearTimeout(timeoutId);
+    console.log('API response received - Status:', response.status);
     
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('API error response:', errorData);
+      console.error('API error response:', response.status, errorData);
       
-      const errorMessage = getErrorMessage(response.status);
+      const errorMessage = getErrorMessage(response.status, errorData);
+      
+      // Retry on server errors if retries are available
+      if (response.status >= 500 && retries > 0) {
+        console.log(`Server error, retrying in ${WEATHER_CONFIG.RETRY_DELAY}ms...`);
+        await new Promise(resolve => setTimeout(resolve, WEATHER_CONFIG.RETRY_DELAY));
+        return fetchWithErrorHandling(url, retries - 1);
+      }
+      
       throw new Error(errorMessage);
     }
     
     return response;
+    
   } catch (error) {
+    clearTimeout(timeoutId);
     console.error('Fetch error:', error);
-    if (error instanceof TypeError) {
-      throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+    
+    if (error instanceof Error) {
+      // Handle timeout errors
+      if (error.name === 'AbortError') {
+        if (retries > 0) {
+          console.log(`Request timeout, retrying in ${WEATHER_CONFIG.RETRY_DELAY}ms...`);
+          await new Promise(resolve => setTimeout(resolve, WEATHER_CONFIG.RETRY_DELAY));
+          return fetchWithErrorHandling(url, retries - 1);
+        }
+        throw new Error(ERROR_MESSAGES.TIMEOUT_ERROR);
+      }
+      
+      // Handle network errors
+      if (error.message.includes('Failed to fetch') || 
+          error.message.includes('Network request failed') || 
+          error.message.includes('fetch')) {
+        if (retries > 0) {
+          console.log(`Network error, retrying in ${WEATHER_CONFIG.RETRY_DELAY}ms...`);
+          await new Promise(resolve => setTimeout(resolve, WEATHER_CONFIG.RETRY_DELAY));
+          return fetchWithErrorHandling(url, retries - 1);
+        }
+        throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+      }
+      
+      // Re-throw API errors (already processed above)
+      if (error.message.includes('Invalid API key') || 
+          error.message.includes('Location not found') || 
+          error.message.includes('rate limit')) {
+        throw error;
+      }
     }
-    throw error;
+    
+    throw new Error(ERROR_MESSAGES.GENERAL_ERROR);
   }
+};
+
+// Enhanced API key validation with real-time testing
+const validateAndTestApiKey = async (): Promise<{ valid: boolean; error?: string }> => {
+  const apiKey = WEATHER_CONFIG.API_KEY;
+  
+  // Basic validation first
+  if (!validateApiKey(apiKey)) {
+    return { 
+      valid: false, 
+      error: apiKey.includes('YOUR_') ? ERROR_MESSAGES.API_KEY_NOT_SET : ERROR_MESSAGES.INVALID_API_KEY 
+    };
+  }
+  
+  // Test the API key with actual request
+  return await testApiKey(apiKey);
 };
 
 export const useWeatherStore = create<WeatherState>((set, get) => ({
@@ -131,27 +197,42 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   error: null,
 
   fetchWeather: async (city = WEATHER_CONFIG.DEFAULT_CITY) => {
-    console.log('Fetching weather for city:', city);
+    console.log('=== Starting weather fetch for city:', city, '===');
     set({ isLoading: true, error: null });
     
     try {
-      // Validate API key first
-      const apiKey = WEATHER_CONFIG.API_KEY;
-      if (!validateApiKey(apiKey)) {
-        console.error('API key validation failed');
-        throw new Error(ERROR_MESSAGES.INVALID_API_KEY);
+      // Step 1: Validate and test API key
+      console.log('Step 1: Validating API key...');
+      const apiKeyTest = await validateAndTestApiKey();
+      
+      if (!apiKeyTest.valid) {
+        console.error('API key validation failed:', apiKeyTest.error);
+        
+        // Check network connectivity
+        const hasNetwork = await checkNetworkConnectivity();
+        if (!hasNetwork) {
+          throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+        }
+        
+        throw new Error(apiKeyTest.error || ERROR_MESSAGES.INVALID_API_KEY);
       }
-
+      
+      console.log('Step 2: API key validated successfully');
+      
+      // Step 3: Build API URL
       const url = buildApiUrl(WEATHER_CONFIG.CURRENT_WEATHER, {
         q: city,
         units: WEATHER_CONFIG.UNITS,
       });
       
+      // Step 4: Fetch weather data
+      console.log('Step 3: Fetching weather data...');
       const response = await fetchWithErrorHandling(url);
       const data: OpenWeatherCurrentResponse = await response.json();
       
-      console.log('Weather data received:', data.name);
+      console.log('Step 4: Weather data received for:', data.name, data.sys.country);
       
+      // Step 5: Transform data
       const weatherData: WeatherData = {
         location: `${data.name}, ${data.sys.country}`,
         temperature: Math.round(data.main.temp),
@@ -169,14 +250,46 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
         ),
       };
       
+      console.log('Step 5: Weather data processed successfully');
       set({ 
         currentWeather: weatherData,
         isLoading: false,
         error: null,
       });
+      
     } catch (error) {
-      console.error('Weather fetch error:', error);
-      const errorMessage = error instanceof Error ? error.message : ERROR_MESSAGES.GENERAL_ERROR;
+      console.error('=== Weather fetch failed ===');
+      console.error('Error details:', error);
+      
+      let errorMessage = ERROR_MESSAGES.GENERAL_ERROR;
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // If it's an API key issue, provide helpful guidance
+        if (errorMessage.includes('Invalid API key') || errorMessage.includes('API key not configured')) {
+          console.error('API Key Issue: Please check your OpenWeatherMap API key configuration');
+          console.error('Current API key starts with:', WEATHER_CONFIG.API_KEY.substring(0, 8) + '...');
+          console.error('Get a free API key at: https://openweathermap.org/api');
+        }
+        
+        // Check if we should provide fallback data
+        if (errorMessage.includes('Network') || errorMessage.includes('timeout')) {
+          console.log('Network issue detected, checking connectivity...');
+          const hasNetwork = await checkNetworkConnectivity();
+          if (!hasNetwork) {
+            console.log('No network connectivity detected, using fallback data');
+            const fallbackData = getFallbackWeatherData(city);
+            set({ 
+              currentWeather: fallbackData,
+              isLoading: false,
+              error: 'Using offline data - ' + ERROR_MESSAGES.NETWORK_ERROR,
+            });
+            return;
+          }
+        }
+      }
+      
       set({ 
         error: errorMessage,
         isLoading: false,
@@ -186,28 +299,42 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
   },
 
   fetchForecast: async (city = WEATHER_CONFIG.DEFAULT_CITY) => {
-    console.log('Fetching forecast for city:', city);
+    console.log('=== Starting forecast fetch for city:', city, '===');
     set({ isLoading: true, error: null });
     
     try {
-      // Validate API key first
-      const apiKey = WEATHER_CONFIG.API_KEY;
-      if (!validateApiKey(apiKey)) {
-        console.error('API key validation failed for forecast');
-        throw new Error(ERROR_MESSAGES.INVALID_API_KEY);
+      // Step 1: Validate and test API key
+      console.log('Step 1: Validating API key for forecast...');
+      const apiKeyTest = await validateAndTestApiKey();
+      
+      if (!apiKeyTest.valid) {
+        console.error('API key validation failed for forecast:', apiKeyTest.error);
+        
+        // Check network connectivity
+        const hasNetwork = await checkNetworkConnectivity();
+        if (!hasNetwork) {
+          throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+        }
+        
+        throw new Error(apiKeyTest.error || ERROR_MESSAGES.INVALID_API_KEY);
       }
-
+      
+      console.log('Step 2: API key validated for forecast');
+      
+      // Step 3: Build API URL
       const url = buildApiUrl(WEATHER_CONFIG.FORECAST, {
         q: city,
         units: WEATHER_CONFIG.UNITS,
       });
       
+      // Step 4: Fetch forecast data
+      console.log('Step 3: Fetching forecast data...');
       const response = await fetchWithErrorHandling(url);
       const data: OpenWeatherForecastResponse = await response.json();
       
-      console.log('Forecast data received, items:', data.list.length);
+      console.log('Step 4: Forecast data received, processing', data.list.length, 'items');
       
-      // Group forecast data by day (API returns 3-hour intervals)
+      // Step 5: Group forecast data by day (API returns 3-hour intervals)
       const dailyForecasts: { [key: string]: any } = {};
       
       data.list.forEach((item) => {
@@ -231,7 +358,7 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
         dailyForecasts[date].precipitations.push(item.pop * 100);
       });
       
-      // Convert to our forecast format and take first 5 days
+      // Step 6: Convert to our forecast format and take first 5 days
       const forecast: ForecastDay[] = Object.keys(dailyForecasts)
         .slice(0, 5)
         .map((dateStr, index) => {
@@ -254,36 +381,44 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
           };
         });
       
+      console.log('Step 5: Forecast data processed successfully, days:', forecast.length);
       set({ 
         forecast,
         isLoading: false,
         error: null,
       });
+      
     } catch (error) {
-      console.error('Forecast fetch error:', error);
-      const errorMessage = error instanceof Error ? error.message : ERROR_MESSAGES.GENERAL_ERROR;
+      console.error('=== Forecast fetch failed ===');
+      console.error('Error details:', error);
+      
+      let errorMessage = ERROR_MESSAGES.GENERAL_ERROR;
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Check if we should provide fallback data
+        if (errorMessage.includes('Network') || errorMessage.includes('timeout')) {
+          console.log('Network issue detected for forecast, checking connectivity...');
+          const hasNetwork = await checkNetworkConnectivity();
+          if (!hasNetwork) {
+            console.log('No network connectivity detected, using fallback forecast data');
+            const fallbackForecast = getFallbackForecast();
+            set({ 
+              forecast: fallbackForecast,
+              isLoading: false,
+              error: 'Using offline data - ' + ERROR_MESSAGES.NETWORK_ERROR,
+            });
+            return;
+          }
+        }
+      }
+      
       set({ 
         error: errorMessage,
         isLoading: false,
         forecast: [],
       });
-    }
-  },
-
-  // Helper method to clear errors
-  clearError: () => set({ error: null }),
-
-  // Helper method to refresh weather data
-  refreshWeather: async (city?: string) => {
-    const state = get();
-    if (state.currentWeather && !city) {
-      // Extract city from current location
-      const currentCity = state.currentWeather.location.split(',')[0];
-      await state.fetchWeather(currentCity);
-      await state.fetchForecast(currentCity);
-    } else {
-      await state.fetchWeather(city);
-      await state.fetchForecast(city);
     }
   },
 }));

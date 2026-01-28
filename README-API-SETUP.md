@@ -1,54 +1,120 @@
 # OpenWeatherMap API Setup Guide
 
-## Quick Setup
+## ⚠️ IMPORTANT: API Key Configuration Required
 
-Your API key has been configured: `e724c58404f238764e1588e742372c34`
+The weather application requires a valid OpenWeatherMap API key to function properly. The current API key appears to be invalid or expired.
 
-The app should now work properly with weather data from OpenWeatherMap.
+## Step-by-Step Setup
 
-## What was fixed:
+### 1. Get Your Free API Key
 
-1. **API Key Configuration**: The API key is now properly set in both `WEATHER_CONFIG.API_KEY` and `WEATHER_CONFIG.DEFAULT_PARAMS.appid`
+1. **Visit OpenWeatherMap**: Go to [https://openweathermap.org/api](https://openweathermap.org/api)
+2. **Choose Plan**: Click "Subscribe" under "Current Weather Data" (Free plan: 1,000 calls/day)
+3. **Create Account**: Sign up for a new account or sign in if you already have one
+4. **Verify Email**: Check your email and verify your account
+5. **Get API Key**: 
+   - Go to your account dashboard
+   - Navigate to "API keys" section
+   - Copy your default API key (32-character string)
 
-2. **Enhanced Validation**: Improved the `validateApiKey()` function to better detect invalid or placeholder keys
+### 2. Configure Your API Key
 
-3. **Better Error Handling**: Added more detailed logging to help debug API issues
+1. **Open Configuration File**: Edit `src/constants/weather-api.ts`
+2. **Replace API Key**: Find this line:
+   ```typescript
+   API_KEY: 'YOUR_OPENWEATHER_API_KEY_HERE',
+   ```
+3. **Paste Your Key**: Replace `'YOUR_OPENWEATHER_API_KEY_HERE'` with your actual API key:
+   ```typescript
+   API_KEY: 'your_actual_32_character_api_key_here',
+   ```
 
-4. **URL Building**: Fixed the URL construction to properly include the API key in requests
+### 3. API Key Activation
 
-## Testing the API
+⏰ **Important**: New API keys may take up to 10 minutes to activate after creation.
 
-The app will automatically test your API key when you:
-- Launch the app (fetches weather for New York by default)
-- Search for a new city
-- Pull to refresh the weather data
+If you get authentication errors immediately after setup:
+- Wait 10-15 minutes
+- Try refreshing the app
+- Check the console for detailed error messages
 
-## API Usage Limits
+### 4. Verify Setup
 
-With the free OpenWeatherMap plan, you get:
-- 1,000 API calls per day
-- 60 calls per minute
-- Access to current weather and 5-day forecast
+The app will automatically:
+- ✅ Validate your API key format
+- ✅ Test connectivity to OpenWeatherMap
+- ✅ Show detailed error messages if issues are found
+- ✅ Provide fallback data if network is unavailable
 
-## Troubleshooting
+### 5. Troubleshooting
 
-If you still see "Weather service unavailable":
+#### Common Issues:
 
-1. **Check API Key Status**: Make sure your API key is active in your OpenWeatherMap account
-2. **Wait for Activation**: New API keys can take up to 2 hours to become active
-3. **Check Network**: Ensure you have an internet connection
-4. **Check Console**: Look for detailed error messages in the developer console
+**"Invalid API key" Error:**
+- Double-check you copied the entire 32-character key
+- Ensure no extra spaces or characters
+- Wait 10 minutes if the key was just created
+- Verify the key is activated in your OpenWeatherMap dashboard
 
-## API Endpoints Used
+**"Network connection failed" Error:**
+- Check your internet connection
+- Try refreshing the page
+- The app will show fallback weather data when offline
 
-- Current Weather: `https://api.openweathermap.org/data/2.5/weather`
-- 5-Day Forecast: `https://api.openweathermap.org/data/2.5/forecast`
+**"API rate limit exceeded" Error:**
+- You've exceeded 1,000 calls per day (free plan)
+- Wait until tomorrow or upgrade your plan
+- Consider caching data to reduce API calls
 
-Both endpoints use metric units (Celsius) by default.
+#### Debug Information:
 
-## Support
+The app provides detailed logging in the browser console:
+1. Open Developer Tools (F12)
+2. Go to Console tab
+3. Look for weather-related log messages
+4. API key validation results will be shown
 
-If you continue to experience issues:
-1. Verify your API key is active at https://openweathermap.org/api
-2. Check the OpenWeatherMap API documentation
-3. Ensure you're not exceeding the rate limits
+### 6. API Key Security
+
+🔒 **Security Notes:**
+- Never commit API keys to public repositories
+- Consider using environment variables in production
+- Monitor your API usage in the OpenWeatherMap dashboard
+- Regenerate keys if compromised
+
+### 7. Features Included
+
+With a valid API key, you get:
+- ✅ Real-time current weather
+- ✅ 5-day weather forecast
+- ✅ Multiple cities support
+- ✅ Detailed weather metrics (humidity, wind, pressure, etc.)
+- ✅ Automatic error handling and retries
+- ✅ Offline fallback data
+
+### 8. Support
+
+If you continue experiencing issues:
+1. Check the browser console for error details
+2. Verify your API key in the OpenWeatherMap dashboard
+3. Ensure your internet connection is stable
+4. Try with a different city name
+
+For OpenWeatherMap-specific issues, visit their [support documentation](https://openweathermap.org/faq).
+
+---
+
+## Example Configuration
+
+```typescript
+// src/constants/weather-api.ts
+export const WEATHER_CONFIG = {
+  API_KEY: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6', // Your actual API key here
+  BASE_URL: 'https://api.openweathermap.org/data/2.5',
+  DEFAULT_CITY: 'New York',
+  UNITS: 'metric',
+  // ... other settings
+};
+```
+
+Replace `a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6` with your actual OpenWeatherMap API key.
