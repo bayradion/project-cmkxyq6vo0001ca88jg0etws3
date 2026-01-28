@@ -6,13 +6,23 @@ import {
   OpenWeatherCurrentResponse,
   OpenWeatherForecastResponse 
 } from '../types';
-
-// OpenWeatherMap API configuration
-const API_KEY = 'demo_key'; // Replace with your actual API key
-const BASE_URL = 'https://api.openweathermap.org/data/2.5';
+import { 
+  WEATHER_CONFIG, 
+  CONDITION_MAPPING, 
+  ERROR_MESSAGES,
+  validateApiKey,
+  getErrorMessage 
+} from '../constants/weather-api';
 
 // Helper function to map OpenWeatherMap weather conditions to our app icons
-const mapWeatherCondition = (weatherMain: string, weatherIcon: string): string => {
+const mapWeatherCondition = (weatherMain: string, weatherDescription: string, weatherIcon: string): string => {
+  // First try to match by description
+  const description = weatherDescription.toLowerCase();
+  if (CONDITION_MAPPING[description]) {
+    return CONDITION_MAPPING[description];
+  }
+
+  // Fallback to main weather type
   const iconCode = weatherIcon.slice(0, 2);
   const isDay = weatherIcon.includes('d');
   
@@ -57,30 +67,71 @@ const getMockUVIndex = (): number => {
   return Math.floor(Math.random() * 11) + 1;
 };
 
-export const useWeatherStore = create<WeatherState>((set) => ({
+// Build API URL with proper error checking
+const buildApiUrl = (endpoint: string, params: Record<string, string>): string => {
+  if (!validateApiKey(WEATHER_CONFIG.API_KEY)) {
+    throw new Error(ERROR_MESSAGES.API_KEY_NOT_SET);
+  }
+  
+  const url = new URL(`${WEATHER_CONFIG.BASE_URL}${endpoint}`);
+  
+  // Add API key
+  url.searchParams.append('appid', WEATHER_CONFIG.API_KEY);
+  
+  // Add other parameters
+  Object.entries(params).forEach(([key, value]) => {
+    url.searchParams.append(key, value);
+  });
+  
+  return url.toString();
+};
+
+// Enhanced fetch with better error handling
+const fetchWithErrorHandling = async (url: string): Promise<Response> => {
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorMessage = getErrorMessage(response.status);
+      throw new Error(errorMessage);
+    }
+    
+    return response;
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+    }
+    throw error;
+  }
+};
+
+export const useWeatherStore = create<WeatherState>((set, get) => ({
   currentWeather: null,
   forecast: [],
   isLoading: false,
   error: null,
 
-  fetchWeather: async (city = 'New York') => {
+  fetchWeather: async (city = WEATHER_CONFIG.DEFAULT_CITY) => {
     set({ isLoading: true, error: null });
     
     try {
-      const response = await fetch(
-        `${BASE_URL}/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric`
-      );
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Invalid API key. Please check your OpenWeatherMap API key.');
-        } else if (response.status === 404) {
-          throw new Error('City not found. Please check the city name.');
-        } else {
-          throw new Error(`Weather service error: ${response.status}`);
-        }
+      // Validate API key first
+      if (!validateApiKey(WEATHER_CONFIG.API_KEY)) {
+        throw new Error(ERROR_MESSAGES.API_KEY_NOT_SET);
       }
+
+      const url = buildApiUrl(WEATHER_CONFIG.CURRENT_WEATHER, {
+        q: city,
+        units: WEATHER_CONFIG.UNITS,
+      });
       
+      const response = await fetchWithErrorHandling(url);
       const data: OpenWeatherCurrentResponse = await response.json();
       
       const weatherData: WeatherData = {
@@ -88,45 +139,48 @@ export const useWeatherStore = create<WeatherState>((set) => ({
         temperature: Math.round(data.main.temp),
         condition: data.weather[0].description.replace(/\b\w/g, l => l.toUpperCase()),
         humidity: data.main.humidity,
-        windSpeed: Math.round(data.wind.speed * 3.6), // Convert m/s to km/h
+        windSpeed: Math.round(data.wind?.speed ? data.wind.speed * 3.6 : 0), // Convert m/s to km/h
         feelsLike: Math.round(data.main.feels_like),
-        uvIndex: getMockUVIndex(), // Mock UV data
-        visibility: Math.round(data.visibility / 1000), // Convert m to km
+        uvIndex: getMockUVIndex(), // Mock UV data since it requires separate API
+        visibility: Math.round((data.visibility || 10000) / 1000), // Convert m to km, default 10km
         pressure: data.main.pressure,
-        icon: mapWeatherCondition(data.weather[0].main, data.weather[0].icon),
+        icon: mapWeatherCondition(
+          data.weather[0].main, 
+          data.weather[0].description,
+          data.weather[0].icon
+        ),
       };
       
       set({ 
         currentWeather: weatherData,
-        isLoading: false 
+        isLoading: false,
+        error: null,
       });
     } catch (error) {
       console.error('Weather fetch error:', error);
       set({ 
-        error: error instanceof Error ? error.message : 'Failed to fetch weather data',
-        isLoading: false 
+        error: error instanceof Error ? error.message : ERROR_MESSAGES.GENERAL_ERROR,
+        isLoading: false,
+        currentWeather: null,
       });
     }
   },
 
-  fetchForecast: async (city = 'New York') => {
+  fetchForecast: async (city = WEATHER_CONFIG.DEFAULT_CITY) => {
     set({ isLoading: true, error: null });
     
     try {
-      const response = await fetch(
-        `${BASE_URL}/forecast?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric`
-      );
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Invalid API key. Please check your OpenWeatherMap API key.');
-        } else if (response.status === 404) {
-          throw new Error('City not found. Please check the city name.');
-        } else {
-          throw new Error(`Forecast service error: ${response.status}`);
-        }
+      // Validate API key first
+      if (!validateApiKey(WEATHER_CONFIG.API_KEY)) {
+        throw new Error(ERROR_MESSAGES.API_KEY_NOT_SET);
       }
+
+      const url = buildApiUrl(WEATHER_CONFIG.FORECAST, {
+        q: city,
+        units: WEATHER_CONFIG.UNITS,
+      });
       
+      const response = await fetchWithErrorHandling(url);
       const data: OpenWeatherForecastResponse = await response.json();
       
       // Group forecast data by day (API returns 3-hour intervals)
@@ -167,21 +221,44 @@ export const useWeatherStore = create<WeatherState>((set) => ({
             high: Math.round(Math.max(...temps)),
             low: Math.round(Math.min(...temps)),
             condition: mostCommonCondition.description.replace(/\b\w/g, (l: string) => l.toUpperCase()),
-            icon: mapWeatherCondition(mostCommonCondition.main, mostCommonCondition.icon),
+            icon: mapWeatherCondition(
+              mostCommonCondition.main, 
+              mostCommonCondition.description,
+              mostCommonCondition.icon
+            ),
             precipitation: Math.round(Math.max(...dayData.precipitations)),
           };
         });
       
       set({ 
         forecast,
-        isLoading: false 
+        isLoading: false,
+        error: null,
       });
     } catch (error) {
       console.error('Forecast fetch error:', error);
       set({ 
-        error: error instanceof Error ? error.message : 'Failed to fetch forecast data',
-        isLoading: false 
+        error: error instanceof Error ? error.message : ERROR_MESSAGES.GENERAL_ERROR,
+        isLoading: false,
+        forecast: [],
       });
+    }
+  },
+
+  // Helper method to clear errors
+  clearError: () => set({ error: null }),
+
+  // Helper method to refresh weather data
+  refreshWeather: async (city?: string) => {
+    const state = get();
+    if (state.currentWeather && !city) {
+      // Extract city from current location
+      const currentCity = state.currentWeather.location.split(',')[0];
+      await state.fetchWeather(currentCity);
+      await state.fetchForecast(currentCity);
+    } else {
+      await state.fetchWeather(city);
+      await state.fetchForecast(city);
     }
   },
 }));

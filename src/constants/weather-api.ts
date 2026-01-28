@@ -1,16 +1,32 @@
 // OpenWeatherMap API Configuration
-// Sign up at: https://openweathermap.org/api
-// Replace 'demo_key' with your actual API key
+// Sign up at: https://openweathermap.org/api to get your free API key
+// Steps to get API key:
+// 1. Go to https://openweathermap.org/api
+// 2. Click "Subscribe" under "Current Weather Data" (it's free for up to 1000 calls/day)
+// 3. Create an account or sign in
+// 4. Go to API Keys section in your account
+// 5. Copy your API key and replace 'YOUR_API_KEY_HERE' below
 
 export const WEATHER_CONFIG = {
-  API_KEY: 'demo_key', // Replace with your OpenWeatherMap API key
+  // Replace this with your actual OpenWeatherMap API key
+  API_KEY: 'YOUR_API_KEY_HERE',
   BASE_URL: 'https://api.openweathermap.org/data/2.5',
   DEFAULT_CITY: 'New York',
   UNITS: 'metric', // metric for Celsius, imperial for Fahrenheit
+  
+  // API endpoints
+  CURRENT_WEATHER: '/weather',
+  FORECAST: '/forecast',
+  
+  // Request parameters
+  DEFAULT_PARAMS: {
+    units: 'metric',
+    appid: '', // Will be set dynamically
+  },
 };
 
 // Weather condition mapping for consistent icons
-export const CONDITION_MAPPING = {
+export const CONDITION_MAPPING: Record<string, string> = {
   'clear sky': 'sunny',
   'few clouds': 'partly-sunny',
   'scattered clouds': 'cloudy',
@@ -22,15 +38,55 @@ export const CONDITION_MAPPING = {
   'heavy intensity rain': 'rainy',
   'thunderstorm': 'rainy',
   'snow': 'snowy',
+  'light snow': 'snowy',
+  'heavy snow': 'snowy',
   'mist': 'foggy',
   'fog': 'foggy',
   'haze': 'foggy',
+  'smoke': 'foggy',
+  'dust': 'foggy',
+  'sand': 'foggy',
+  'ash': 'foggy',
+  'squall': 'cloudy',
+  'tornado': 'cloudy',
 };
 
 // Error messages for better UX
 export const ERROR_MESSAGES = {
-  INVALID_API_KEY: 'Weather service unavailable. Please check API configuration.',
+  INVALID_API_KEY: 'Weather service unavailable. Please configure a valid API key from OpenWeatherMap.',
+  API_KEY_NOT_SET: 'API key not configured. Please get a free API key from https://openweathermap.org/api',
   CITY_NOT_FOUND: 'Location not found. Please try a different city name.',
   NETWORK_ERROR: 'Unable to connect to weather service. Check your internet connection.',
   GENERAL_ERROR: 'Unable to fetch weather data. Please try again later.',
+  RATE_LIMIT: 'Too many requests. Please wait a moment before trying again.',
+};
+
+// API status codes mapping
+export const API_STATUS = {
+  SUCCESS: 200,
+  UNAUTHORIZED: 401,
+  NOT_FOUND: 404,
+  RATE_LIMIT: 429,
+  SERVER_ERROR: 500,
+};
+
+// Validation function for API key
+export const validateApiKey = (apiKey: string): boolean => {
+  return apiKey && apiKey !== 'YOUR_API_KEY_HERE' && apiKey !== 'demo_key' && apiKey.length > 0;
+};
+
+// Get error message based on status code
+export const getErrorMessage = (statusCode: number): string => {
+  switch (statusCode) {
+    case API_STATUS.UNAUTHORIZED:
+      return ERROR_MESSAGES.INVALID_API_KEY;
+    case API_STATUS.NOT_FOUND:
+      return ERROR_MESSAGES.CITY_NOT_FOUND;
+    case API_STATUS.RATE_LIMIT:
+      return ERROR_MESSAGES.RATE_LIMIT;
+    case API_STATUS.SERVER_ERROR:
+      return ERROR_MESSAGES.GENERAL_ERROR;
+    default:
+      return ERROR_MESSAGES.NETWORK_ERROR;
+  }
 };
